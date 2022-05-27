@@ -1,6 +1,10 @@
-package caesarCypher
+package main
 
-import "fmt"
+import (
+	caesarCypher "cct/pkg/caesarcypher"
+	"fmt"
+	"os"
+)
 
 // program modes
 const (
@@ -17,6 +21,37 @@ const (
 const (
 	unknownMsg = "Unknown input parameter. You will be redirected to main menu"
 )
+
+func interactiveLoop() int {
+
+	for {
+
+		printUsage(mainMode)
+
+		in, err := scanInput()
+		if err != nil {
+			return errorExit(err)
+		}
+
+		err = handleInput(in, handleInputMain)
+		if err != nil {
+			if err.Error() == exitMode {
+				fmt.Println("Goodbye")
+				break
+			}
+			return errorExit(err)
+		}
+	}
+
+	return 0
+}
+
+func errorExit(err error) int {
+	fmt.Fprintln(os.Stderr, err)
+	fmt.Println("type any key to terminate program: ")
+	_, _ = scanInput()
+	return 1
+}
 
 // printUsage prints menu for the provided program mode
 func printUsage(mode int) {
@@ -105,16 +140,17 @@ func handleEncDecInput(input string) error {
 		return err
 	}
 
-	c, err := newСryptographer(k)
+	var c cryptographer
+	c, err = caesarCypher.NewСryptographer(k)
 	if err != nil {
 		return err
 	}
 
 	if input == string(encryptMode) {
-		return c.encode(p)
+		return c.Encode(p)
 	}
 	if input == string(decryptMode) {
-		return c.decode(p)
+		return c.Decode(p)
 	}
 
 	return nil
@@ -133,15 +169,16 @@ func handleCryptoanalysisInput(input string) error {
 		return err
 	}
 
+	var c cryptographer
 	// since we don't know the key
-	// we pass key == 1 to cryptographer
-	c, err := newСryptographer(1)
+	// we pass key == 0 to cryptographer
+	c, err = caesarCypher.NewСryptographer(0)
 	if err != nil {
 		return err
 	}
 
 	if input == string(bruteForceMode) {
-		err = c.bruteForce(p)
+		err = c.BruteForce(p)
 		if err != nil {
 			return err
 		}
@@ -157,7 +194,7 @@ func handleCryptoanalysisInput(input string) error {
 			return err
 		}
 
-		err = c.frequencyAnalysis(p, p2)
+		err = c.FrequencyAnalysis(p, p2)
 		if err != nil {
 			return err
 		}
