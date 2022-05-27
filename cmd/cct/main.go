@@ -4,15 +4,17 @@ import (
 	caesarCypher "cct/pkg/caesarcypher"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 )
 
 // the contract for cryptographer tool
 type cryptographer interface {
-	Encode(path string) error
-	Decode(path string) error
-	BruteForce(path string) error
-	FrequencyAnalysis(path, helper string) error
+	Encode(r io.Reader, w io.Writer) error
+	Decode(r io.Reader, w io.Writer) error
+	BruteForce(r io.Reader, w io.Writer) error
+	FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer) error
 }
 
 func main() {
@@ -103,6 +105,22 @@ func (tf *toolFlags) execute() error {
 	var c cryptographer
 	var err error
 
+	in, err := os.Open(tf.inputFileName())
+	if err != nil {
+		return err
+	}
+
+	out, err := os.Create(tf.outFileName())
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		fmt.Printf("Processed: %s >> %s\n", in.Name(), out.Name())
+		_ = out.Close()
+		_ = in.Close()
+	}()
+
 	if tf.decode != "" {
 
 		if tf.key != 0 {
@@ -111,7 +129,7 @@ func (tf *toolFlags) execute() error {
 				if err != nil {
 					return err
 				}
-				err = c.Decode(tf.decode)
+				err = c.Decode(in, out)
 				if err != nil {
 					return err
 				}
@@ -125,7 +143,7 @@ func (tf *toolFlags) execute() error {
 				if err != nil {
 					return err
 				}
-				err = c.BruteForce(tf.decode)
+				err = c.BruteForce(in, out)
 				if err != nil {
 					return err
 				}
@@ -135,11 +153,17 @@ func (tf *toolFlags) execute() error {
 
 		if tf.freq != "" {
 			return func() error {
+				helper, err := os.Open(tf.freq)
+				if err != nil {
+					return err
+				}
+				defer helper.Close()
+
 				c, err = caesarCypher.NewСryptographer(0)
 				if err != nil {
 					return err
 				}
-				err = c.FrequencyAnalysis(tf.decode, tf.freq)
+				err = c.FrequencyAnalysis(in, helper, out)
 				if err != nil {
 					return err
 				}
@@ -150,13 +174,14 @@ func (tf *toolFlags) execute() error {
 	}
 
 	if tf.encode != "" {
+
 		if tf.key != 0 {
 			return func() error {
 				c, err = caesarCypher.NewСryptographer(tf.key)
 				if err != nil {
 					return err
 				}
-				err = c.Encode(tf.encode)
+				err = c.Encode(in, out)
 				if err != nil {
 					return err
 				}
@@ -166,4 +191,33 @@ func (tf *toolFlags) execute() error {
 	}
 
 	return nil
+}
+
+func (tf *toolFlags) outFileName() string {
+	if tf.out != "" {
+		return tf.out
+	} else {
+		return tf.prefixForFile() + filepath.Base(tf.inputFileName())
+	}
+}
+
+func (tf *toolFlags) prefixForFile() string {
+	switch {
+	case tf.out != "":
+		return ""
+	case tf.decode != "":
+		return "decrypted_"
+	case tf.encode != "":
+		return "encrypted_"
+	default:
+		return ""
+	}
+}
+
+func (tf *toolFlags) inputFileName() string {
+	if tf.decode != "" {
+		return tf.decode
+	} else {
+		return tf.encode
+	}
 }

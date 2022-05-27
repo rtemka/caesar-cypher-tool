@@ -2,10 +2,9 @@ package caesarCypher
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"unicode/utf8"
 )
 
@@ -55,9 +54,8 @@ func NewСryptographer(key int) (*cryptographer, error) {
 	return &cryptographer{lookup: lookup, alphabet: alphabet, key: key}, nil
 }
 
-// Encode gets the filename and encode it contents to
-// the separate file
-func (c *cryptographer) Encode(fp string) error {
+// Encode reads the r and encode it contents to w
+func (c *cryptographer) Encode(r io.Reader, w io.Writer) error {
 
 	// encoding logic
 	f := func(char rune) rune {
@@ -78,12 +76,12 @@ func (c *cryptographer) Encode(fp string) error {
 		return c.alphabet[pos]
 	}
 
-	// pass our logic to file writer
-	return processFile("encrypted_", fp, f)
+	// pass our logic to writer
+	return process(r, w, f)
 }
 
-// Decode is the reverse of encode function
-func (c *cryptographer) Decode(fp string) error {
+// Decode reads the r and decode it contents to w
+func (c *cryptographer) Decode(r io.Reader, w io.Writer) error {
 
 	f := func(char rune) rune {
 		pos, ok := c.lookup[char]
@@ -100,20 +98,21 @@ func (c *cryptographer) Decode(fp string) error {
 		return c.alphabet[pos]
 	}
 
-	// pass our logic to file writer
-	return processFile("decrypted_", fp, f)
+	// pass our logic to writer
+	return process(r, w, f)
 }
 
-// BruteForce tries to decode file sequentially selecting the keys
-func (c *cryptographer) BruteForce(fp string) error {
+// BruteForce reads r and tries to decode it contents to w
+// sequentially selecting the keys
+func (c *cryptographer) BruteForce(r io.Reader, w io.Writer) error {
 
-	b, err := os.ReadFile(fp)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
 	match := false
 
-	fmt.Printf("\nBrute-forcing file '%s'...\n", fp)
+	fmt.Printf("\nBrute-forcing ...\n")
 
 	for ; c.key < len(c.alphabet); c.key++ {
 
@@ -136,21 +135,22 @@ func (c *cryptographer) BruteForce(fp string) error {
 	}
 
 	if !match {
-		fmt.Printf("Result: fail to brute-forcing a file: %s\n", fp)
+		fmt.Printf("Result: fail to brute-forcing\n")
 		return nil
 	}
-	fmt.Println("Result: success. Decoding file...")
+	fmt.Println("Result: success. Decoding...")
 
-	return c.Decode(fp)
+	return c.Decode(bytes.NewReader(b), w)
 }
 
-// FrequencyAnalysis tries to decode file with the frequency analysis method
-func (c *cryptographer) FrequencyAnalysis(fp, helperFp string) error {
+// FrequencyAnalysis reads r and tries to decode it contents to w
+// using the frequency analysis method
+func (c *cryptographer) FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer) error {
 
-	fmt.Printf("\nDecoding the file by frequency analysis '%s'...\n", fp)
+	fmt.Printf("\nDecoding by frequency analysis...\n")
 
-	// read the helper file
-	b, err := os.ReadFile(helperFp)
+	// read the helper
+	b, err := io.ReadAll(hr)
 	if err != nil {
 		return err
 	}
@@ -161,8 +161,8 @@ func (c *cryptographer) FrequencyAnalysis(fp, helperFp string) error {
 		return err
 	}
 
-	// read the encoded file
-	b, err = os.ReadFile(fp)
+	// read the encoded
+	b, err = io.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (c *cryptographer) FrequencyAnalysis(fp, helperFp string) error {
 
 	// if key is not found we try most frequent rune overall
 	if !pass {
-		fmt.Println("Avoiding helper file, trying statistically most frequent character which is space")
+		fmt.Println("Avoiding helper, trying statistically most frequent character which is space")
 
 		posDec, posEnc := c.lookup[mostFrequentChar], c.lookup[mfrEncrypted]
 
@@ -216,9 +216,9 @@ func (c *cryptographer) FrequencyAnalysis(fp, helperFp string) error {
 		}
 	}
 
-	fmt.Println("Result: success. Decoding file...")
+	fmt.Println("Result: success. Decoding...")
 
-	return c.Decode(fp)
+	return c.Decode(bytes.NewReader(b), w)
 }
 
 // countMostFrequent returns most frequent rune
@@ -308,29 +308,14 @@ func printStatInfo(stat, expected int, result bool) {
 	}
 }
 
-// processFile from the source file and writes to
-// the destination file, passing the data through
+// process from the source r and writes to
+// the destination w, passing the data through
 // the decryption function, which it receives as the third parameter
-func processFile(prefix, fp string, f func(rune) rune) error {
-
-	inFile, err := os.Open(fp)
-	if err != nil {
-		return err
-	}
-	defer inFile.Close()
-
-	dir, fname := filepath.Split(fp)
-	fpath := filepath.Join(dir, prefix+fname)
-
-	outFile, err := os.Create(fpath)
-	if err != nil {
-		return err
-	}
-	defer outFile.Close()
+func process(r io.Reader, w io.Writer, f func(rune) rune) error {
 
 	rw := bufio.NewReadWriter(
-		bufio.NewReader(inFile),
-		bufio.NewWriter(outFile),
+		bufio.NewReader(r),
+		bufio.NewWriter(w),
 	)
 
 	for {
@@ -352,8 +337,6 @@ func processFile(prefix, fp string, f func(rune) rune) error {
 	}
 
 	rw.Flush()
-
-	fmt.Printf("Processed: %s >> %s\n", filepath.Clean(fp), fpath)
 
 	return nil
 }

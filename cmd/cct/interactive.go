@@ -130,7 +130,13 @@ func handleEncDecInput(input string) error {
 		return nil
 	}
 
-	p, err := scanPath("text")
+	inPath, err := scanPath("input_text")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\nNext the output file")
+	outPath, err := scanPath("output_text")
 	if err != nil {
 		return err
 	}
@@ -146,14 +152,37 @@ func handleEncDecInput(input string) error {
 		return err
 	}
 
+	in, out, err := openInOutFiles(inPath, outPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		fmt.Printf("Processed: %s >> %s\n", in.Name(), out.Name())
+		_ = in.Close()
+		_ = out.Close()
+	}()
+
 	if input == string(encryptMode) {
-		return c.Encode(p)
+		return c.Encode(in, out)
 	}
 	if input == string(decryptMode) {
-		return c.Decode(p)
+		return c.Decode(in, out)
 	}
 
 	return nil
+}
+
+func openInOutFiles(path1, path2 string) (*os.File, *os.File, error) {
+	in, err := os.Open(path1)
+	if err != nil {
+		return nil, nil, err
+	}
+	out, err := os.Create(path2)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return in, out, nil
 }
 
 // handleCryptoanalysisInput cryptoanalysis menu handler
@@ -164,7 +193,13 @@ func handleCryptoanalysisInput(input string) error {
 		return nil
 	}
 
-	p, err := scanPath("encryptedtext")
+	inPath, err := scanPath("encrypted_text")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\nNext the output file")
+	outPath, err := scanPath("decrypted_text")
 	if err != nil {
 		return err
 	}
@@ -177,11 +212,18 @@ func handleCryptoanalysisInput(input string) error {
 		return err
 	}
 
+	in, out, err := openInOutFiles(inPath, outPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		fmt.Printf("Processed: %s >> %s\n", in.Name(), out.Name())
+		_ = in.Close()
+		_ = out.Close()
+	}()
+
 	if input == string(bruteForceMode) {
-		err = c.BruteForce(p)
-		if err != nil {
-			return err
-		}
+		return c.BruteForce(in, out)
 	}
 
 	if input == string(freqAnalysisMode) {
@@ -189,15 +231,17 @@ func handleCryptoanalysisInput(input string) error {
 		fmt.Println("\nYou also need to provide helper file for analysis")
 		fmt.Println("This file must be unencrypted file of the same author")
 
-		p2, err := scanPath("same_author_text")
+		helperPath, err := scanPath("same_author_text")
 		if err != nil {
 			return err
 		}
+		helper, err := os.Open(helperPath)
+		if err != nil {
+			return err
+		}
+		defer helper.Close()
 
-		err = c.FrequencyAnalysis(p, p2)
-		if err != nil {
-			return err
-		}
+		return c.FrequencyAnalysis(in, helper, out)
 	}
 	return nil
 }
