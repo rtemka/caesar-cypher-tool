@@ -30,8 +30,8 @@ type cryptographer struct {
 	key      int
 }
 
-// newСryptographer is cryptographer constructor
-func newСryptographer(key int) (*cryptographer, error) {
+// NewСryptographer returns instance of cryptogrpher
+func NewСryptographer(key int) (*cryptographer, error) {
 
 	// get our alphabet
 	alphabet := cryptoAlphabet()
@@ -41,8 +41,8 @@ func newСryptographer(key int) (*cryptographer, error) {
 		return nil, fmt.Errorf("invalid key: %d. Must be not greater than %d", key, size)
 	}
 
-	if key <= 0 {
-		return nil, fmt.Errorf("invalid key: %d. Must be greater than zero", key)
+	if key < 0 {
+		return nil, fmt.Errorf("invalid key: %d. Can't be less than zero", key)
 	}
 
 	lookup := make(map[rune]int, size)
@@ -55,9 +55,9 @@ func newСryptographer(key int) (*cryptographer, error) {
 	return &cryptographer{lookup: lookup, alphabet: alphabet, key: key}, nil
 }
 
-// encode gets the filename and encode it contents to
+// Encode gets the filename and encode it contents to
 // the separate file
-func (c *cryptographer) encode(fp string) error {
+func (c *cryptographer) Encode(fp string) error {
 
 	// encoding logic
 	f := func(char rune) rune {
@@ -82,8 +82,8 @@ func (c *cryptographer) encode(fp string) error {
 	return processFile("encrypted_", fp, f)
 }
 
-// decode is the reverse of encode function
-func (c *cryptographer) decode(fp string) error {
+// Decode is the reverse of encode function
+func (c *cryptographer) Decode(fp string) error {
 
 	f := func(char rune) rune {
 		pos, ok := c.lookup[char]
@@ -104,8 +104,8 @@ func (c *cryptographer) decode(fp string) error {
 	return processFile("decrypted_", fp, f)
 }
 
-// bruteForce tries to decode file sequentially selecting the keys
-func (c *cryptographer) bruteForce(fp string) error {
+// BruteForce tries to decode file sequentially selecting the keys
+func (c *cryptographer) BruteForce(fp string) error {
 
 	b, err := os.ReadFile(fp)
 	if err != nil {
@@ -141,11 +141,11 @@ func (c *cryptographer) bruteForce(fp string) error {
 	}
 	fmt.Println("Result: success. Decoding file...")
 
-	return c.decode(fp)
+	return c.Decode(fp)
 }
 
-// frequencyAnalysis tries to decode file with the frequency analysis method
-func (c *cryptographer) frequencyAnalysis(fp, helperFp string) error {
+// FrequencyAnalysis tries to decode file with the frequency analysis method
+func (c *cryptographer) FrequencyAnalysis(fp, helperFp string) error {
 
 	fmt.Printf("\nDecoding the file by frequency analysis '%s'...\n", fp)
 
@@ -218,7 +218,7 @@ func (c *cryptographer) frequencyAnalysis(fp, helperFp string) error {
 
 	fmt.Println("Result: success. Decoding file...")
 
-	return c.decode(fp)
+	return c.Decode(fp)
 }
 
 // countMostFrequent returns most frequent rune
