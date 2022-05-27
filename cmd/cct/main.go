@@ -1,7 +1,7 @@
 package main
 
 import (
-	"CaesarCypher/src/caesarCypher"
+	caesarCypher "cct/pkg/caesarcypher"
 	"os"
 )
 
