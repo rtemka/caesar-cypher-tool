@@ -16,9 +16,7 @@ func (c CaesarCypherController) Start() int {
 
 		in, err := scanInput()
 		if err != nil {
-			fmt.Println(err)
-			fmt.Println("type any key to terminate program: ")
-			return 1
+			return out(err)
 		}
 
 		err = handleInput(in, handleInputMain)
@@ -27,12 +25,16 @@ func (c CaesarCypherController) Start() int {
 				fmt.Println("Goodbye")
 				break
 			}
-			fmt.Println(err)
-			fmt.Println("type any key to terminate program: ")
-			_, _ = scanInput()
-			return 1
+			return out(err)
 		}
 	}
 
 	return 0
+}
+
+func out(err error) int {
+	fmt.Println(err)
+	fmt.Println("type any key to terminate program: ")
+	_, _ = scanInput()
+	return 1
 }
