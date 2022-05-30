@@ -308,9 +308,9 @@ func printStatInfo(stat, expected int, result bool) {
 	}
 }
 
-// process from the source r and writes to
+// process reads runes from the source r and writes to
 // the destination w, passing the data through
-// the decryption function, which it receives as the third parameter
+// the encryption/decryption function, which it receives as the third parameter
 func process(r io.Reader, w io.Writer, f func(rune) rune) error {
 
 	rw := bufio.NewReadWriter(
