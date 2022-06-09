@@ -23,13 +23,26 @@ func cryptoAlphabet() []rune {
 		':', ',', '"', '?', '-', '—', '.', '!', ' '}
 }
 
+// entity holding cypher logic
 type cryptographer struct {
 	lookup   map[rune]int
 	alphabet []rune
 	key      int
 }
 
-// NewСryptographer returns instance of cryptogrpher
+type Encoder struct {
+	c *cryptographer
+	w io.Writer
+}
+
+type Decoder struct {
+	c    *cryptographer
+	r    io.Reader
+	hr   io.Reader               // helper stream
+	decf func(w io.Writer) error // decode function
+}
+
+// NewСryptographer returns instance of cryptographer
 func NewСryptographer(key int) (*cryptographer, error) {
 
 	// get our alphabet
@@ -54,59 +67,96 @@ func NewСryptographer(key int) (*cryptographer, error) {
 	return &cryptographer{lookup: lookup, alphabet: alphabet, key: key}, nil
 }
 
-// Encode reads the r and encode it contents to w
-func (c *cryptographer) Encode(r io.Reader, w io.Writer) error {
+// NewEncoder returns instance of encoder that writes
+// result to w
+func (c *cryptographer) NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{c: c, w: w}
+}
+
+// NewKeyDecoder returns instance of Decoder that
+// decode contents of r using known key
+func (c *cryptographer) NewKeyDecoder(r io.Reader) *Decoder {
+	dec := Decoder{c: c, r: r}
+	dec.decf = dec.decode
+	return &dec
+}
+
+// NewBruteForceDecoder returns instance of Decoder that
+// decode contents of r using brute force method
+func (c *cryptographer) NewBruteForceDecoder(r io.Reader) *Decoder {
+	dec := Decoder{c: c, r: r}
+	dec.decf = dec.bruteForce
+	return &dec
+}
+
+// NewFreqAnalisysDecoder returns instance of Decoder that
+// decode contents of r using frequency analysis method
+func (c *cryptographer) NewFreqAnalisysDecoder(r io.Reader, helper io.Reader) *Decoder {
+	dec := Decoder{c: c, r: r, hr: helper}
+	dec.decf = dec.frequencyAnalysis
+	return &dec
+}
+
+// Encode reads the contents of r, encoding it
+// and writes to the stream
+func (enc *Encoder) Encode(r io.Reader) error {
 
 	// encoding logic
 	f := func(char rune) rune {
 		// if char is not in our alphabet
 		// then encode it as skipRune
-		pos, ok := c.lookup[char]
+		pos, ok := enc.c.lookup[char]
 		if !ok {
 			return skipRune
 		}
 
 		// calculate the position after shift
-		pos += c.key
-		if pos > len(c.alphabet)-1 {
-			pos = pos - len(c.alphabet)
+		pos += enc.c.key
+		if pos > len(enc.c.alphabet)-1 {
+			pos = pos - len(enc.c.alphabet)
 		}
 
 		// encode it as shifted rune
-		return c.alphabet[pos]
+		return enc.c.alphabet[pos]
 	}
 
-	// pass our logic to writer
-	return process(r, w, f)
+	// pass our logic to processor
+	return process(r, enc.w, f)
 }
 
-// Decode reads the r and decode it contents to w
-func (c *cryptographer) Decode(r io.Reader, w io.Writer) error {
+// Decode reads the inner r and decode it contents to w
+func (dec *Decoder) Decode(w io.Writer) error {
+	return dec.decf(w)
+}
+
+// decode reads inner r and decode it contents to w
+// using known key
+func (dec *Decoder) decode(w io.Writer) error {
 
 	f := func(char rune) rune {
-		pos, ok := c.lookup[char]
+		pos, ok := dec.c.lookup[char]
 		if !ok {
 			return skipRune
 		}
 
 		// backward shift
-		pos -= c.key
+		pos -= dec.c.key
 		if pos < 0 {
-			pos = len(c.alphabet) + pos
+			pos = len(dec.c.alphabet) + pos
 		}
 
-		return c.alphabet[pos]
+		return dec.c.alphabet[pos]
 	}
 
-	// pass our logic to writer
-	return process(r, w, f)
+	// pass our logic to processor
+	return process(dec.r, w, f)
 }
 
-// BruteForce reads r and tries to decode it contents to w
+// bruteForce reads inner r and tries to decode it contents to w
 // sequentially selecting the keys
-func (c *cryptographer) BruteForce(r io.Reader, w io.Writer) error {
+func (dec *Decoder) bruteForce(w io.Writer) error {
 
-	b, err := io.ReadAll(r)
+	b, err := io.ReadAll(dec.r)
 	if err != nil {
 		return err
 	}
@@ -114,13 +164,13 @@ func (c *cryptographer) BruteForce(r io.Reader, w io.Writer) error {
 
 	fmt.Printf("\nBrute-forcing ...\n")
 
-	for ; c.key < len(c.alphabet); c.key++ {
+	for ; dec.c.key < len(dec.c.alphabet); dec.c.key++ {
 
-		fmt.Printf("trying key %d -> ", c.key)
+		fmt.Printf("trying key %d -> ", dec.c.key)
 
 		// we run the text through a function that looks for patterns
 		// function returns statistics over the text
-		stat := c.findCommonPatterns(b)
+		stat := dec.c.findCommonPatterns(b)
 
 		// if text statistic exceeds the threshold
 		// then the key is found
@@ -140,54 +190,56 @@ func (c *cryptographer) BruteForce(r io.Reader, w io.Writer) error {
 	}
 	fmt.Println("Result: success. Decoding...")
 
-	return c.Decode(bytes.NewReader(b), w)
+	dec.r = bytes.NewReader(b)
+
+	return dec.decode(w)
 }
 
-// FrequencyAnalysis reads r and tries to decode it contents to w
+// frequencyAnalysis reads r and tries to decode it contents to w
 // using the frequency analysis method
-func (c *cryptographer) FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer) error {
+func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
 
 	fmt.Printf("\nDecoding by frequency analysis...\n")
 
 	// read the helper
-	b, err := io.ReadAll(hr)
+	b, err := io.ReadAll(dec.hr)
 	if err != nil {
 		return err
 	}
 
 	// find most frequent rune
-	mfrDecrypted, err := c.countMostFrequent(b)
+	mfrDecrypted, err := dec.c.countMostFrequent(b)
 	if err != nil {
 		return err
 	}
 
 	// read the encoded
-	b, err = io.ReadAll(r)
+	b, err = io.ReadAll(dec.r)
 	if err != nil {
 		return err
 	}
 
 	// find most frequent rune
-	mfrEncrypted, err := c.countMostFrequent(b)
+	mfrEncrypted, err := dec.c.countMostFrequent(b)
 	if err != nil {
 		return err
 	}
 
 	// get positions in alphabet
-	posDec, posEnc := c.lookup[mfrDecrypted], c.lookup[mfrEncrypted]
+	posDec, posEnc := dec.c.lookup[mfrDecrypted], dec.c.lookup[mfrEncrypted]
 
 	// calculate key
 	if posDec <= posEnc {
-		c.key = posEnc - posDec
+		dec.c.key = posEnc - posDec
 	} else {
-		c.key = len(c.alphabet) + posEnc - posDec
+		dec.c.key = len(dec.c.alphabet) + posEnc - posDec
 	}
 
-	fmt.Printf("trying possible key %d -> ", c.key)
+	fmt.Printf("trying possible key %d -> ", dec.c.key)
 
 	/// we run the text through a function that looks for patterns
 	// function returns statistics over the text
-	stat := c.findCommonPatterns(b)
+	stat := dec.c.findCommonPatterns(b)
 
 	// if text statistic exceeds the threshold
 	// then the key is found
@@ -198,16 +250,16 @@ func (c *cryptographer) FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer
 	if !pass {
 		fmt.Println("Avoiding helper, trying statistically most frequent character which is space")
 
-		posDec, posEnc := c.lookup[mostFrequentChar], c.lookup[mfrEncrypted]
+		posDec, posEnc := dec.c.lookup[mostFrequentChar], dec.c.lookup[mfrEncrypted]
 
 		if posDec <= posEnc {
-			c.key = posEnc - posDec
+			dec.c.key = posEnc - posDec
 		} else {
-			c.key = len(c.alphabet) + posEnc - posDec
+			dec.c.key = len(dec.c.alphabet) + posEnc - posDec
 		}
 
-		fmt.Printf("trying possible key %d -> ", c.key)
-		stat := c.findCommonPatterns(b)
+		fmt.Printf("trying possible key %d -> ", dec.c.key)
+		stat := dec.c.findCommonPatterns(b)
 		pass := stat*100/len(b) >= 1
 		printStatInfo(stat, len(b)/100, pass)
 
@@ -218,7 +270,9 @@ func (c *cryptographer) FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer
 
 	fmt.Println("Result: success. Decoding...")
 
-	return c.Decode(bytes.NewReader(b), w)
+	dec.r = bytes.NewReader(b)
+
+	return dec.decode(w)
 }
 
 // countMostFrequent returns most frequent rune
