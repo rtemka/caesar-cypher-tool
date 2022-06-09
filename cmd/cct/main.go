@@ -4,18 +4,9 @@ import (
 	caesarCypher "cct/pkg/caesarcypher"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
-
-// the contract for cryptographer tool
-type cryptographer interface {
-	Encode(r io.Reader, w io.Writer) error
-	Decode(r io.Reader, w io.Writer) error
-	BruteForce(r io.Reader, w io.Writer) error
-	FrequencyAnalysis(r io.Reader, hr io.Reader, w io.Writer) error
-}
 
 func main() {
 
@@ -102,8 +93,6 @@ func (tf *toolFlags) validate() error {
 }
 
 func (tf *toolFlags) execute() error {
-	var c cryptographer
-	var err error
 
 	in, err := os.Open(tf.inputFileName())
 	if err != nil {
@@ -115,79 +104,41 @@ func (tf *toolFlags) execute() error {
 		return err
 	}
 
+	c, err := caesarCypher.NewСryptographer(tf.key)
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		fmt.Printf("Processed: %s >> %s\n", in.Name(), out.Name())
 		_ = out.Close()
 		_ = in.Close()
 	}()
 
+	if tf.encode != "" {
+		return c.NewEncoder(out).Encode(in)
+	}
+
 	if tf.decode != "" {
 
 		if tf.key != 0 {
-			return func() error {
-				c, err = caesarCypher.NewСryptographer(tf.key)
-				if err != nil {
-					return err
-				}
-				err = c.Decode(in, out)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
+			return c.NewKeyDecoder(in).Decode(out)
 		}
 
 		if tf.brute {
-			return func() error {
-				c, err = caesarCypher.NewСryptographer(0)
-				if err != nil {
-					return err
-				}
-				err = c.BruteForce(in, out)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
+			return c.NewBruteForceDecoder(in).Decode(out)
 		}
 
 		if tf.freq != "" {
-			return func() error {
-				helper, err := os.Open(tf.freq)
-				if err != nil {
-					return err
-				}
-				defer helper.Close()
+			helper, err := os.Open(tf.freq)
+			if err != nil {
+				return err
+			}
+			defer helper.Close()
 
-				c, err = caesarCypher.NewСryptographer(0)
-				if err != nil {
-					return err
-				}
-				err = c.FrequencyAnalysis(in, helper, out)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
+			return c.NewFreqAnalisysDecoder(in, helper).Decode(out)
 		}
 
-	}
-
-	if tf.encode != "" {
-
-		if tf.key != 0 {
-			return func() error {
-				c, err = caesarCypher.NewСryptographer(tf.key)
-				if err != nil {
-					return err
-				}
-				err = c.Encode(in, out)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
-		}
 	}
 
 	return nil

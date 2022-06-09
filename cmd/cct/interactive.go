@@ -146,8 +146,7 @@ func handleEncDecInput(input string) error {
 		return err
 	}
 
-	var c cryptographer
-	c, err = caesarCypher.NewСryptographer(k)
+	c, err := caesarCypher.NewСryptographer(k)
 	if err != nil {
 		return err
 	}
@@ -163,10 +162,10 @@ func handleEncDecInput(input string) error {
 	}()
 
 	if input == string(encryptMode) {
-		return c.Encode(in, out)
+		return c.NewEncoder(out).Encode(in)
 	}
 	if input == string(decryptMode) {
-		return c.Decode(in, out)
+		return c.NewKeyDecoder(in).Decode(out)
 	}
 
 	return nil
@@ -204,10 +203,9 @@ func handleCryptoanalysisInput(input string) error {
 		return err
 	}
 
-	var c cryptographer
 	// since we don't know the key
 	// we pass key == 0 to cryptographer
-	c, err = caesarCypher.NewСryptographer(0)
+	c, err := caesarCypher.NewСryptographer(0)
 	if err != nil {
 		return err
 	}
@@ -223,7 +221,7 @@ func handleCryptoanalysisInput(input string) error {
 	}()
 
 	if input == string(bruteForceMode) {
-		return c.BruteForce(in, out)
+		return c.NewBruteForceDecoder(in).Decode(out)
 	}
 
 	if input == string(freqAnalysisMode) {
@@ -241,7 +239,7 @@ func handleCryptoanalysisInput(input string) error {
 		}
 		defer helper.Close()
 
-		return c.FrequencyAnalysis(in, helper, out)
+		return c.NewFreqAnalisysDecoder(in, helper).Decode(out)
 	}
 	return nil
 }
