@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"unicode/utf8"
 )
 
@@ -24,26 +25,27 @@ func cryptoAlphabet() []rune {
 }
 
 // entity holding cypher logic
-type cryptographer struct {
+type cypher struct {
 	lookup   map[rune]int
 	alphabet []rune
 	key      int
+	logger   *log.Logger
 }
 
-type Encoder struct {
-	c *cryptographer
+type Encrypter struct {
+	c *cypher
 	w io.Writer
 }
 
-type Decoder struct {
-	c    *cryptographer
+type Decrypter struct {
+	c    *cypher
 	r    io.Reader
 	hr   io.Reader               // helper stream
-	decf func(w io.Writer) error // decode function
+	decf func(w io.Writer) error // decrypt function
 }
 
-// NewСryptographer returns instance of cryptographer
-func NewСryptographer(key int) (*cryptographer, error) {
+// NewCypher returns instance of cypher
+func NewCypher(key int, l *log.Logger) (*cypher, error) {
 
 	// get our alphabet
 	alphabet := cryptoAlphabet()
@@ -64,47 +66,47 @@ func NewСryptographer(key int) (*cryptographer, error) {
 		lookup[alphabet[i]] = i
 	}
 
-	return &cryptographer{lookup: lookup, alphabet: alphabet, key: key}, nil
+	return &cypher{lookup: lookup, alphabet: alphabet, key: key, logger: l}, nil
 }
 
-// NewEncoder returns instance of encoder that writes
+// NewEncrypter returns instance of Encrypter that writes
 // result to w
-func (c *cryptographer) NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{c: c, w: w}
+func (c *cypher) NewEncrypter(w io.Writer) *Encrypter {
+	return &Encrypter{c: c, w: w}
 }
 
-// NewKeyDecoder returns instance of Decoder that
-// decode contents of r using known key
-func (c *cryptographer) NewKeyDecoder(r io.Reader) *Decoder {
-	dec := Decoder{c: c, r: r}
-	dec.decf = dec.decode
+// NewDecrypter returns instance of Decrypter that
+// decrypt contents of r using known key
+func (c *cypher) NewDecrypter(r io.Reader) *Decrypter {
+	dec := Decrypter{c: c, r: r}
+	dec.decf = dec.decrypt
 	return &dec
 }
 
-// NewBruteForceDecoder returns instance of Decoder that
-// decode contents of r using brute force method
-func (c *cryptographer) NewBruteForceDecoder(r io.Reader) *Decoder {
-	dec := Decoder{c: c, r: r}
+// NewBruteForceDecrypter returns instance of Decrypter that
+// decrypt contents of r using brute force method
+func (c *cypher) NewBruteForceDecrypter(r io.Reader) *Decrypter {
+	dec := Decrypter{c: c, r: r}
 	dec.decf = dec.bruteForce
 	return &dec
 }
 
-// NewFreqAnalisysDecoder returns instance of Decoder that
-// decode contents of r using frequency analysis method
-func (c *cryptographer) NewFreqAnalisysDecoder(r io.Reader, helper io.Reader) *Decoder {
-	dec := Decoder{c: c, r: r, hr: helper}
+// NewFreqAnalisysDecrypter returns instance of Decrypter that
+// decrypt contents of r using frequency analysis method
+func (c *cypher) NewFreqAnalisysDecrypter(r io.Reader, helper io.Reader) *Decrypter {
+	dec := Decrypter{c: c, r: r, hr: helper}
 	dec.decf = dec.frequencyAnalysis
 	return &dec
 }
 
-// Encode reads the contents of r, encoding it
+// Encrypt reads the contents of r, encrypting it
 // and writes to the stream
-func (enc *Encoder) Encode(r io.Reader) error {
+func (enc *Encrypter) Encrypt(r io.Reader) error {
 
-	// encoding logic
+	// encrypting logic
 	f := func(char rune) rune {
 		// if char is not in our alphabet
-		// then encode it as skipRune
+		// then encrypt it as skipRune
 		pos, ok := enc.c.lookup[char]
 		if !ok {
 			return skipRune
@@ -116,7 +118,7 @@ func (enc *Encoder) Encode(r io.Reader) error {
 			pos = pos - len(enc.c.alphabet)
 		}
 
-		// encode it as shifted rune
+		// encrypt it as shifted rune
 		return enc.c.alphabet[pos]
 	}
 
@@ -124,14 +126,14 @@ func (enc *Encoder) Encode(r io.Reader) error {
 	return process(r, enc.w, f)
 }
 
-// Decode reads the inner r and decode it contents to w
-func (dec *Decoder) Decode(w io.Writer) error {
+// decrypt reads the inner r and decrypt it contents to w
+func (dec *Decrypter) Decrypt(w io.Writer) error {
 	return dec.decf(w)
 }
 
-// decode reads inner r and decode it contents to w
+// decrypt reads inner r and decrypt it contents to w
 // using known key
-func (dec *Decoder) decode(w io.Writer) error {
+func (dec *Decrypter) decrypt(w io.Writer) error {
 
 	f := func(char rune) rune {
 		pos, ok := dec.c.lookup[char]
@@ -152,9 +154,9 @@ func (dec *Decoder) decode(w io.Writer) error {
 	return process(dec.r, w, f)
 }
 
-// bruteForce reads inner r and tries to decode it contents to w
+// bruteForce reads inner r and tries to decrypt it contents to w
 // sequentially selecting the keys
-func (dec *Decoder) bruteForce(w io.Writer) error {
+func (dec *Decrypter) bruteForce(w io.Writer) error {
 
 	b, err := io.ReadAll(dec.r)
 	if err != nil {
@@ -162,11 +164,9 @@ func (dec *Decoder) bruteForce(w io.Writer) error {
 	}
 	match := false
 
-	fmt.Printf("\nBrute-forcing ...\n")
+	dec.c.logger.Printf("Brute-forcing ...\n")
 
 	for ; dec.c.key < len(dec.c.alphabet); dec.c.key++ {
-
-		fmt.Printf("trying key %d -> ", dec.c.key)
 
 		// we run the text through a function that looks for patterns
 		// function returns statistics over the text
@@ -176,7 +176,8 @@ func (dec *Decoder) bruteForce(w io.Writer) error {
 		// then the key is found
 		pass := stat*100/len(b) >= 1
 
-		printStatInfo(stat, len(b)/100, pass)
+		info := statInfo(stat, len(b)/100, pass)
+		dec.c.logger.Printf("trying possible key %3d -> %s\n", dec.c.key, info)
 
 		if pass {
 			match = true
@@ -185,21 +186,21 @@ func (dec *Decoder) bruteForce(w io.Writer) error {
 	}
 
 	if !match {
-		fmt.Printf("Result: fail to brute-forcing\n")
+		dec.c.logger.Printf("Result: fail to brute-forcing\n")
 		return nil
 	}
-	fmt.Println("Result: success. Decoding...")
+	dec.c.logger.Printf("Result: success. Decrypting...\n")
 
 	dec.r = bytes.NewReader(b)
 
-	return dec.decode(w)
+	return dec.decrypt(w)
 }
 
-// frequencyAnalysis reads r and tries to decode it contents to w
+// frequencyAnalysis reads r and tries to decrypt it contents to w
 // using the frequency analysis method
-func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
+func (dec *Decrypter) frequencyAnalysis(w io.Writer) error {
 
-	fmt.Printf("\nDecoding by frequency analysis...\n")
+	dec.c.logger.Printf("Decrypting by frequency analysis...\n")
 
 	// read the helper
 	b, err := io.ReadAll(dec.hr)
@@ -213,7 +214,7 @@ func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
 		return err
 	}
 
-	// read the encoded
+	// read the Encryptd
 	b, err = io.ReadAll(dec.r)
 	if err != nil {
 		return err
@@ -235,8 +236,6 @@ func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
 		dec.c.key = len(dec.c.alphabet) + posEnc - posDec
 	}
 
-	fmt.Printf("trying possible key %d -> ", dec.c.key)
-
 	/// we run the text through a function that looks for patterns
 	// function returns statistics over the text
 	stat := dec.c.findCommonPatterns(b)
@@ -244,11 +243,12 @@ func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
 	// if text statistic exceeds the threshold
 	// then the key is found
 	pass := stat*100/len(b) >= 1
-	printStatInfo(stat, len(b)/100, pass)
+	info := statInfo(stat, len(b)/100, pass)
+	dec.c.logger.Printf("trying possible key %3d -> %s\n", dec.c.key, info)
 
 	// if key is not found we try most frequent rune overall
 	if !pass {
-		fmt.Println("Avoiding helper, trying statistically most frequent character which is space")
+		dec.c.logger.Println("Avoiding helper, trying statistically most frequent character which is space")
 
 		posDec, posEnc := dec.c.lookup[mostFrequentChar], dec.c.lookup[mfrEncrypted]
 
@@ -258,26 +258,26 @@ func (dec *Decoder) frequencyAnalysis(w io.Writer) error {
 			dec.c.key = len(dec.c.alphabet) + posEnc - posDec
 		}
 
-		fmt.Printf("trying possible key %d -> ", dec.c.key)
 		stat := dec.c.findCommonPatterns(b)
 		pass := stat*100/len(b) >= 1
-		printStatInfo(stat, len(b)/100, pass)
+		info := statInfo(stat, len(b)/100, pass)
+		dec.c.logger.Printf("trying possible key %3d -> %s\n", dec.c.key, info)
 
 		if !pass {
 			return nil
 		}
 	}
 
-	fmt.Println("Result: success. Decoding...")
+	dec.c.logger.Printf("Result: success. Decrypting...\n")
 
 	dec.r = bytes.NewReader(b)
 
-	return dec.decode(w)
+	return dec.decrypt(w)
 }
 
 // countMostFrequent returns most frequent rune
 // in provided text
-func (c *cryptographer) countMostFrequent(b []byte) (rune, error) {
+func (c *cypher) countMostFrequent(b []byte) (rune, error) {
 
 	fm := make(map[rune]int, len(c.alphabet))
 	var mostFrequentChar rune
@@ -303,7 +303,7 @@ func (c *cryptographer) countMostFrequent(b []byte) (rune, error) {
 
 // findCommonPatterns returns the statistics over the
 // provided text (i.e how many times the pattern emerges in text)
-func (c *cryptographer) findCommonPatterns(b []byte) int {
+func (c *cypher) findCommonPatterns(b []byte) int {
 	stat := 0
 	foundMode := 1
 	// foundMode 1 == found [letter]
@@ -352,13 +352,12 @@ runes:
 	return stat
 }
 
-func printStatInfo(stat, expected int, result bool) {
-	fmt.Printf("found pattern matches %d; expected threshold %d", stat, expected)
+func statInfo(stat, expected int, result bool) string {
+	msg := fmt.Sprintf("found pattern matches %4d; expected threshold %4d", stat, expected)
 	if result {
-		fmt.Println(" -> Result: -> success")
+		return msg + " -> Result: -> success"
 	} else {
-		fmt.Println(" -> Result: too few -> fail")
-
+		return msg + " -> Result: -> fail"
 	}
 }
 
