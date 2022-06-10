@@ -15,14 +15,14 @@ const (
 	decryptMode        = 'd'
 	bruteForceMode     = 'b'
 	freqAnalysisMode   = 'f'
-	exitMode           = "exit"
+	exitMode           = "q"
 )
 
 const (
 	unknownMsg = "Unknown input parameter. You will be redirected to main menu"
 )
 
-func interactiveLoop() int {
+func (t *tool) interactiveLoop() int {
 
 	for {
 
@@ -33,7 +33,7 @@ func interactiveLoop() int {
 			return errorExit(err)
 		}
 
-		err = handleInput(in, handleInputMain)
+		err = handleInput(in, t.handleInputMain)
 		if err != nil {
 			if err.Error() == exitMode {
 				fmt.Println("Goodbye")
@@ -94,7 +94,7 @@ func handleInput(input string, f func(string) error) error {
 }
 
 // handleInputMain main menu handler
-func handleInputMain(input string) error {
+func (t *tool) handleInputMain(input string) error {
 
 	switch input {
 
@@ -105,7 +105,7 @@ func handleInputMain(input string) error {
 		if err != nil {
 			return err
 		}
-		return handleInput(in, handleEncDecInput)
+		return handleInput(in, t.handleEncDecInput)
 
 	case fmt.Sprint(cryptoanalysisMode):
 
@@ -114,7 +114,7 @@ func handleInputMain(input string) error {
 		if err != nil {
 			return err
 		}
-		return handleInput(in, handleCryptoanalysisInput)
+		return handleInput(in, t.handleCryptoanalysisInput)
 
 	default:
 		fmt.Println(unknownMsg)
@@ -123,7 +123,7 @@ func handleInputMain(input string) error {
 }
 
 // handleEncDecInput encode/decode menu handler
-func handleEncDecInput(input string) error {
+func (t *tool) handleEncDecInput(input string) error {
 
 	if input != string(encryptMode) && input != string(decryptMode) {
 		fmt.Println(unknownMsg)
@@ -146,7 +146,7 @@ func handleEncDecInput(input string) error {
 		return err
 	}
 
-	c, err := caesarCypher.NewСryptographer(k)
+	c, err := caesarCypher.NewCypher(k, t.logger)
 	if err != nil {
 		return err
 	}
@@ -162,10 +162,10 @@ func handleEncDecInput(input string) error {
 	}()
 
 	if input == string(encryptMode) {
-		return c.NewEncoder(out).Encode(in)
+		return c.NewEncrypter(out).Encrypt(in)
 	}
 	if input == string(decryptMode) {
-		return c.NewKeyDecoder(in).Decode(out)
+		return c.NewDecrypter(in).Decrypt(out)
 	}
 
 	return nil
@@ -185,7 +185,7 @@ func openInOutFiles(path1, path2 string) (*os.File, *os.File, error) {
 }
 
 // handleCryptoanalysisInput cryptoanalysis menu handler
-func handleCryptoanalysisInput(input string) error {
+func (t *tool) handleCryptoanalysisInput(input string) error {
 
 	if input != string(bruteForceMode) && input != string(freqAnalysisMode) {
 		fmt.Println(unknownMsg)
@@ -205,7 +205,7 @@ func handleCryptoanalysisInput(input string) error {
 
 	// since we don't know the key
 	// we pass key == 0 to cryptographer
-	c, err := caesarCypher.NewСryptographer(0)
+	c, err := caesarCypher.NewCypher(0, t.logger)
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func handleCryptoanalysisInput(input string) error {
 	}()
 
 	if input == string(bruteForceMode) {
-		return c.NewBruteForceDecoder(in).Decode(out)
+		return c.NewBruteForceDecrypter(in).Decrypt(out)
 	}
 
 	if input == string(freqAnalysisMode) {
@@ -239,7 +239,7 @@ func handleCryptoanalysisInput(input string) error {
 		}
 		defer helper.Close()
 
-		return c.NewFreqAnalisysDecoder(in, helper).Decode(out)
+		return c.NewFreqAnalisysDecrypter(in, helper).Decrypt(out)
 	}
 	return nil
 }
