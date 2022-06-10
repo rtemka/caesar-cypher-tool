@@ -4,6 +4,8 @@ import (
 	caesarCypher "cct/pkg/caesarcypher"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -12,18 +14,17 @@ func main() {
 
 	flags := parseToolFlags()
 
-	if flags.interactive {
-		os.Exit(interactiveLoop())
-	}
-
-	err := flags.validate()
+	tool, err := newTool(flags)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	err = flags.execute()
-	if err != nil {
+	if tool.flags.interactive {
+		os.Exit(tool.interactiveLoop())
+	}
+
+	if err := tool.execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -31,8 +32,33 @@ func main() {
 	os.Exit(0)
 }
 
+type tool struct {
+	flags  toolFlags
+	logger *log.Logger
+}
+
+func newTool(flags toolFlags) (*tool, error) {
+	err := flags.validate()
+	if err != nil {
+		return nil, err
+	}
+
+	l := func() *log.Logger {
+		if flags.verbose {
+			return log.New(os.Stdout, "[cypher tool] | ", log.Lmsgprefix)
+		} else if flags.interactive {
+			return log.New(os.Stdout, "", 0)
+		} else {
+			return log.New(io.Discard, "", 0)
+		}
+	}()
+
+	return &tool{flags: flags, logger: l}, nil
+}
+
 type toolFlags struct {
 	interactive bool
+	verbose     bool
 	encode      string
 	decode      string
 	brute       bool
@@ -51,6 +77,7 @@ func parseToolFlags() toolFlags {
 	flag.IntVar(&f.key, "k", 0, "the key for encoding/decoding -k <number>")
 	flag.BoolVar(&f.brute, "bf", false, "brute force decoding")
 	flag.BoolVar(&f.interactive, "i", false, "run tool in interactive mode")
+	flag.BoolVar(&f.verbose, "v", false, "verbose output")
 
 	flag.Parse()
 
@@ -58,6 +85,10 @@ func parseToolFlags() toolFlags {
 }
 
 func (tf *toolFlags) validate() error {
+
+	if tf.interactive {
+		return nil
+	}
 
 	if tf.encode != "" && tf.decode != "" {
 		return fmt.Errorf("you must choose either encode '-e' mode or decode '-d' mode, not both")
@@ -92,51 +123,51 @@ func (tf *toolFlags) validate() error {
 	return nil
 }
 
-func (tf *toolFlags) execute() error {
+func (t *tool) execute() error {
 
-	in, err := os.Open(tf.inputFileName())
+	in, err := os.Open(t.flags.inputFileName())
 	if err != nil {
 		return err
 	}
 
-	out, err := os.Create(tf.outFileName())
+	out, err := os.Create(t.flags.outFileName())
 	if err != nil {
 		return err
 	}
 
-	c, err := caesarCypher.NewСryptographer(tf.key)
+	c, err := caesarCypher.NewCypher(t.flags.key, t.logger)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		fmt.Printf("Processed: %s >> %s\n", in.Name(), out.Name())
+		t.logger.Printf("Processed: %s > %s\n", in.Name(), out.Name())
 		_ = out.Close()
 		_ = in.Close()
 	}()
 
-	if tf.encode != "" {
-		return c.NewEncoder(out).Encode(in)
+	if t.flags.encode != "" {
+		return c.NewEncrypter(out).Encrypt(in)
 	}
 
-	if tf.decode != "" {
+	if t.flags.decode != "" {
 
-		if tf.key != 0 {
-			return c.NewKeyDecoder(in).Decode(out)
+		if t.flags.key != 0 {
+			return c.NewDecrypter(in).Decrypt(out)
 		}
 
-		if tf.brute {
-			return c.NewBruteForceDecoder(in).Decode(out)
+		if t.flags.brute {
+			return c.NewBruteForceDecrypter(in).Decrypt(out)
 		}
 
-		if tf.freq != "" {
-			helper, err := os.Open(tf.freq)
+		if t.flags.freq != "" {
+			helper, err := os.Open(t.flags.freq)
 			if err != nil {
 				return err
 			}
 			defer helper.Close()
 
-			return c.NewFreqAnalisysDecoder(in, helper).Decode(out)
+			return c.NewFreqAnalisysDecrypter(in, helper).Decrypt(out)
 		}
 
 	}
