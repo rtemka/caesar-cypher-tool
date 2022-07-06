@@ -163,7 +163,7 @@ func (t *tool) execute() error {
 		}
 
 		if t.flags.brute {
-			return c.NewBruteForceDecrypter(in).Decrypt(out)
+			return c.NewDecrypter(in).BruteForce().Decrypt(out)
 		}
 
 		if t.flags.freq != "" {
@@ -173,7 +173,7 @@ func (t *tool) execute() error {
 			}
 			defer helper.Close()
 
-			return c.NewFreqAnalisysDecrypter(in, helper).Decrypt(out)
+			return c.NewDecrypter(in).FrequencyAnalysis().Helper(helper).Decrypt(out)
 		}
 
 	}

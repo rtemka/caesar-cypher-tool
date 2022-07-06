@@ -222,7 +222,7 @@ func (t *tool) handleCryptoanalysisInput(input string) error {
 	}()
 
 	if input == string(bruteForceMode) {
-		return c.NewBruteForceDecrypter(in).Decrypt(out)
+		return c.NewDecrypter(in).BruteForce().Decrypt(out)
 	}
 
 	if input == string(freqAnalysisMode) {
@@ -240,7 +240,7 @@ func (t *tool) handleCryptoanalysisInput(input string) error {
 		}
 		defer helper.Close()
 
-		return c.NewFreqAnalisysDecrypter(in, helper).Decrypt(out)
+		return c.NewDecrypter(in).FrequencyAnalysis().Helper(helper).Decrypt(out)
 	}
 	return nil
 }
