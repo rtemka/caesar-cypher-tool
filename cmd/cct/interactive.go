@@ -1,9 +1,10 @@
 package main
 
 import (
-	caesarCypher "cct/pkg/caesarcypher"
 	"fmt"
 	"os"
+
+	caesarCypher "github.com/rtemka/caesarcypher"
 )
 
 // program modes

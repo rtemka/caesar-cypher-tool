@@ -1,13 +1,14 @@
 package main
 
 import (
-	caesarCypher "cct/pkg/caesarcypher"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+
+	caesarCypher "github.com/rtemka/caesarcypher"
 )
 
 func main() {
