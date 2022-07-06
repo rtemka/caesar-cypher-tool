@@ -14,6 +14,11 @@ func main() {
 
 	flags := parseToolFlags()
 
+	if len(os.Args) == 1 {
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
 	tool, err := newTool(flags)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
